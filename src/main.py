@@ -15,6 +15,7 @@ from dotenv import load_dotenv
 import logging
 
 from cache import cache_manager, create_query_hash
+from rate_limiter import check_rate_limits
 
 # Load environment variables
 load_dotenv()
@@ -70,6 +71,34 @@ def verify_api_key(x_api_key: Optional[str] = Header(None)) -> bool:
     return True
 
 
+async def check_airtable_limits(base_id: str, api_key: str) -> None:
+    """Check Airtable API rate limits and raise HTTPException if exceeded."""
+    rate_check = await check_rate_limits(base_id, api_key)
+    
+    if not rate_check["allowed"]:
+        result = rate_check["result"]
+        limit_type = rate_check["limit_type"]
+        
+        logger.warning(
+            f"Airtable {limit_type} rate limit exceeded",
+            base_id=base_id,
+            limit=result["limit"],
+            retry_after=result["retry_after"]
+        )
+        
+        raise HTTPException(
+            status_code=429,
+            detail=f"Rate limit exceeded for {limit_type} ({result['limit']} requests per {result['window_seconds']}s)",
+            headers={
+                "X-RateLimit-Limit": str(result["limit"]),
+                "X-RateLimit-Remaining": str(result["remaining"]),
+                "X-RateLimit-Reset": str(int(result["reset_time"])),
+                "Retry-After": str(result["retry_after"]),
+                "X-RateLimit-Type": limit_type
+            }
+        )
+
+
 @app.get("/health")
 async def health_check():
     """Health check endpoint"""
@@ -85,6 +114,9 @@ async def health_check():
 async def list_bases(x_api_key: Optional[str] = Header(None)):
     """List all accessible Airtable bases"""
     verify_api_key(x_api_key)
+    
+    # Check global rate limit (using a dummy base_id for global limit)
+    await check_airtable_limits("global", AIRTABLE_TOKEN)
     
     # Try cache first
     cached_bases = await cache_manager.get_bases()
@@ -116,6 +148,9 @@ async def list_bases(x_api_key: Optional[str] = Header(None)):
 async def get_base_schema(base_id: str, x_api_key: Optional[str] = Header(None)):
     """Get schema for a specific base including all tables"""
     verify_api_key(x_api_key)
+    
+    # Check rate limits
+    await check_airtable_limits(base_id, AIRTABLE_TOKEN)
     
     # Try cache first
     cached_schema = await cache_manager.get_schema(base_id)
@@ -172,6 +207,9 @@ async def list_records(
     """List records from a table with optional filtering"""
     verify_api_key(x_api_key)
     
+    # Check rate limits
+    await check_airtable_limits(base_id, AIRTABLE_TOKEN)
+    
     # Create query hash for caching
     query_hash = create_query_hash(max_records, view, filter_by_formula, sort)
     
@@ -225,6 +263,9 @@ async def create_record(
     """Create a new record in a table"""
     verify_api_key(x_api_key)
     
+    # Check rate limits
+    await check_airtable_limits(base_id, AIRTABLE_TOKEN)
+    
     try:
         table = airtable.table(base_id, table_id)
         record = table.create(fields)
@@ -258,6 +299,9 @@ async def update_record(
     """Update an existing record"""
     verify_api_key(x_api_key)
     
+    # Check rate limits
+    await check_airtable_limits(base_id, AIRTABLE_TOKEN)
+    
     try:
         table = airtable.table(base_id, table_id)
         record = table.update(record_id, fields)
@@ -290,6 +334,9 @@ async def delete_record(
     """Delete a record"""
     verify_api_key(x_api_key)
     
+    # Check rate limits
+    await check_airtable_limits(base_id, AIRTABLE_TOKEN)
+    
     try:
         table = airtable.table(base_id, table_id)
         deleted = table.delete(record_id)
@@ -317,6 +364,9 @@ async def create_records_batch(
 ):
     """Create multiple records in a single request"""
     verify_api_key(x_api_key)
+    
+    # Check rate limits
+    await check_airtable_limits(base_id, AIRTABLE_TOKEN)
     
     try:
         table = airtable.table(base_id, table_id)
