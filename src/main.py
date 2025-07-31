@@ -14,6 +14,8 @@ from pyairtable.exceptions import HttpError
 from dotenv import load_dotenv
 import logging
 
+from cache import cache_manager, create_query_hash
+
 # Load environment variables
 load_dotenv()
 
@@ -33,9 +35,11 @@ if not AIRTABLE_TOKEN:
 async def lifespan(app: FastAPI):
     # Startup
     logger.info("Starting Airtable Gateway Service...")
+    await cache_manager.connect()
     yield
     # Shutdown
     logger.info("Shutting down Airtable Gateway Service...")
+    await cache_manager.disconnect()
 
 
 # Initialize FastAPI app
@@ -69,13 +73,24 @@ def verify_api_key(x_api_key: Optional[str] = Header(None)) -> bool:
 @app.get("/health")
 async def health_check():
     """Health check endpoint"""
-    return {"status": "healthy", "service": "airtable-gateway"}
+    cache_health = await cache_manager.health_check()
+    return {
+        "status": "healthy", 
+        "service": "airtable-gateway",
+        "cache": cache_health
+    }
 
 
 @app.get("/bases")
 async def list_bases(x_api_key: Optional[str] = Header(None)):
     """List all accessible Airtable bases"""
     verify_api_key(x_api_key)
+    
+    # Try cache first
+    cached_bases = await cache_manager.get_bases()
+    if cached_bases:
+        logger.info(f"Retrieved {len(cached_bases)} bases from cache")
+        return {"bases": cached_bases}
     
     try:
         bases = []
@@ -86,7 +101,10 @@ async def list_bases(x_api_key: Optional[str] = Header(None)):
                 "permission_level": base.permission_level
             })
         
-        logger.info(f"Retrieved {len(bases)} bases")
+        # Cache the result
+        await cache_manager.set_bases(bases)
+        
+        logger.info(f"Retrieved {len(bases)} bases from Airtable API")
         return {"bases": bases}
     
     except Exception as e:
@@ -98,6 +116,12 @@ async def list_bases(x_api_key: Optional[str] = Header(None)):
 async def get_base_schema(base_id: str, x_api_key: Optional[str] = Header(None)):
     """Get schema for a specific base including all tables"""
     verify_api_key(x_api_key)
+    
+    # Try cache first
+    cached_schema = await cache_manager.get_schema(base_id)
+    if cached_schema:
+        logger.info(f"Retrieved schema for base {base_id} from cache")
+        return cached_schema
     
     try:
         base = airtable.base(base_id)
@@ -122,8 +146,13 @@ async def get_base_schema(base_id: str, x_api_key: Optional[str] = Header(None))
                 "views": [{"id": view.id, "name": view.name} for view in table.views]
             })
         
-        logger.info(f"Retrieved schema for base {base_id} with {len(tables)} tables")
-        return {"base_id": base_id, "tables": tables}
+        result = {"base_id": base_id, "tables": tables}
+        
+        # Cache the result
+        await cache_manager.set_schema(base_id, result)
+        
+        logger.info(f"Retrieved schema for base {base_id} with {len(tables)} tables from Airtable API")
+        return result
     
     except Exception as e:
         logger.error(f"Error getting base schema: {e}")
@@ -142,6 +171,15 @@ async def list_records(
 ):
     """List records from a table with optional filtering"""
     verify_api_key(x_api_key)
+    
+    # Create query hash for caching
+    query_hash = create_query_hash(max_records, view, filter_by_formula, sort)
+    
+    # Try cache first
+    cached_records = await cache_manager.get_records(base_id, table_id, query_hash)
+    if cached_records:
+        logger.info(f"Retrieved {len(cached_records)} records from cache for {base_id}/{table_id}")
+        return {"records": cached_records}
     
     try:
         table = airtable.table(base_id, table_id)
@@ -163,7 +201,10 @@ async def list_records(
                 "createdTime": record["createdTime"]
             })
         
-        logger.info(f"Retrieved {len(records)} records from {base_id}/{table_id}")
+        # Cache the result
+        await cache_manager.set_records(base_id, table_id, query_hash, records)
+        
+        logger.info(f"Retrieved {len(records)} records from Airtable API for {base_id}/{table_id}")
         return {"records": records}
     
     except HttpError as e:
@@ -187,6 +228,9 @@ async def create_record(
     try:
         table = airtable.table(base_id, table_id)
         record = table.create(fields)
+        
+        # Invalidate cache for this table
+        await cache_manager.invalidate_table(base_id, table_id)
         
         logger.info(f"Created record {record['id']} in {base_id}/{table_id}")
         return {
@@ -218,6 +262,9 @@ async def update_record(
         table = airtable.table(base_id, table_id)
         record = table.update(record_id, fields)
         
+        # Invalidate cache for this table
+        await cache_manager.invalidate_table(base_id, table_id)
+        
         logger.info(f"Updated record {record_id} in {base_id}/{table_id}")
         return {
             "id": record["id"],
@@ -247,6 +294,9 @@ async def delete_record(
         table = airtable.table(base_id, table_id)
         deleted = table.delete(record_id)
         
+        # Invalidate cache for this table
+        await cache_manager.invalidate_table(base_id, table_id)
+        
         logger.info(f"Deleted record {record_id} from {base_id}/{table_id}")
         return {"deleted": True, "id": record_id}
     
@@ -271,6 +321,9 @@ async def create_records_batch(
     try:
         table = airtable.table(base_id, table_id)
         created_records = table.batch_create(records)
+        
+        # Invalidate cache for this table
+        await cache_manager.invalidate_table(base_id, table_id)
         
         logger.info(f"Created {len(created_records)} records in {base_id}/{table_id}")
         return {"records": created_records}
