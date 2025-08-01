@@ -7,7 +7,7 @@ This is the **foundational data layer** of the PyAirtable ecosystem. It provides
 - **Core Functionality**: ✅ Complete CRUD operations for Airtable records
 - **Authentication**: ⚠️ Simple API key (needs JWT upgrade)
 - **Caching**: ✅ Redis caching with smart invalidation implemented
-- **Rate Limiting**: ❌ Not implemented (Airtable limit: 5 QPS)
+- **Rate Limiting**: ✅ Redis-based distributed rate limiting implemented
 - **Testing**: ❌ No tests yet
 - **Monitoring**: ⚠️ Basic logging + cache health monitoring
 
@@ -31,14 +31,15 @@ POST   /bases/{base_id}/tables/{table_id}/records/batch        # Batch create
 ```
 
 ## 🚀 Immediate Priorities
-1. **Implement Rate Limiting** (HIGH)
-   - Respect Airtable's 5 QPS limit
-   - Add per-base rate limiting
-   - Queue excess requests
-
-2. **Add Retry Logic** (MEDIUM)
+1. **Add Retry Logic** (MEDIUM)
    - Exponential backoff for 429 errors
    - Circuit breaker for repeated failures
+
+2. **Rate Limiting** ✅ (COMPLETED)
+   - Respect Airtable's 5 QPS limit ✅
+   - Add per-base rate limiting ✅  
+   - Global rate limiting (100 QPM) ✅
+   - Proper HTTP headers and 429 responses ✅
 
 3. **Redis Caching** ✅ (COMPLETED)
    - Cache base schemas (1 hour TTL) ✅
