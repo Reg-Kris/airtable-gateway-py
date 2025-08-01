@@ -9,15 +9,15 @@ from typing import Optional, Dict, Any, List
 
 from fastapi import HTTPException, Header, Query, Depends
 from pyairtable import Api
-from pyairtable.exceptions import HttpError
+from requests.exceptions import HTTPError as HttpError
 
 # Add pyairtable-common to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../pyairtable-common'))
 
 from pyairtable_common.service import PyAirtableService, ServiceConfig
 
-from cache import cache_manager, create_query_hash
-from rate_limiter import check_rate_limits
+from .cache import cache_manager, create_query_hash
+from .rate_limiter import check_rate_limits
 
 # Secure configuration imports
 try:
@@ -258,7 +258,9 @@ class AirtableGatewayService(PyAirtableService):
             
             except HttpError as e:
                 self.logger.error(f"Airtable API error: {e}")
-                raise HTTPException(status_code=e.status_code, detail=e.message)
+                status_code = e.response.status_code if e.response else 500
+                detail = str(e)
+                raise HTTPException(status_code=status_code, detail=detail)
             except Exception as e:
                 self.logger.error(f"Error listing records: {e}")
                 raise HTTPException(status_code=500, detail=str(e))
@@ -291,7 +293,9 @@ class AirtableGatewayService(PyAirtableService):
             
             except HttpError as e:
                 self.logger.error(f"Airtable API error: {e}")
-                raise HTTPException(status_code=e.status_code, detail=e.message)
+                status_code = e.response.status_code if e.response else 500
+                detail = str(e)
+                raise HTTPException(status_code=status_code, detail=detail)
             except Exception as e:
                 self.logger.error(f"Error creating record: {e}")
                 raise HTTPException(status_code=500, detail=str(e))
@@ -325,7 +329,9 @@ class AirtableGatewayService(PyAirtableService):
             
             except HttpError as e:
                 self.logger.error(f"Airtable API error: {e}")
-                raise HTTPException(status_code=e.status_code, detail=e.message)
+                status_code = e.response.status_code if e.response else 500
+                detail = str(e)
+                raise HTTPException(status_code=status_code, detail=detail)
             except Exception as e:
                 self.logger.error(f"Error updating record: {e}")
                 raise HTTPException(status_code=500, detail=str(e))
@@ -354,7 +360,9 @@ class AirtableGatewayService(PyAirtableService):
             
             except HttpError as e:
                 self.logger.error(f"Airtable API error: {e}")
-                raise HTTPException(status_code=e.status_code, detail=e.message)
+                status_code = e.response.status_code if e.response else 500
+                detail = str(e)
+                raise HTTPException(status_code=status_code, detail=detail)
             except Exception as e:
                 self.logger.error(f"Error deleting record: {e}")
                 raise HTTPException(status_code=500, detail=str(e))
@@ -383,7 +391,9 @@ class AirtableGatewayService(PyAirtableService):
             
             except HttpError as e:
                 self.logger.error(f"Airtable API error: {e}")
-                raise HTTPException(status_code=e.status_code, detail=e.message)
+                status_code = e.response.status_code if e.response else 500
+                detail = str(e)
+                raise HTTPException(status_code=status_code, detail=detail)
             except Exception as e:
                 self.logger.error(f"Error batch creating records: {e}")
                 raise HTTPException(status_code=500, detail=str(e))

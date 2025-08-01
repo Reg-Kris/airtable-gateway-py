@@ -9,7 +9,7 @@ import logging
 import redis.asyncio as redis
 from redis.asyncio import Redis
 
-from cache import cache_manager
+from .cache import cache_manager
 
 logger = logging.getLogger(__name__)
 

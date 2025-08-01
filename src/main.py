@@ -11,12 +11,12 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Header, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pyairtable import Api
-from pyairtable.exceptions import HttpError
+from requests.exceptions import HTTPError as HttpError
 from dotenv import load_dotenv
 import logging
 
-from cache import cache_manager, create_query_hash
-from rate_limiter import check_rate_limits
+from .cache import cache_manager, create_query_hash
+from .rate_limiter import check_rate_limits
 
 # Load environment variables
 load_dotenv()
@@ -296,7 +296,9 @@ async def list_records(
     
     except HttpError as e:
         logger.error(f"Airtable API error: {e}")
-        raise HTTPException(status_code=e.status_code, detail=e.message)
+        status_code = e.response.status_code if e.response else 500
+        detail = str(e)
+        raise HTTPException(status_code=status_code, detail=detail)
     except Exception as e:
         logger.error(f"Error listing records: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -331,7 +333,9 @@ async def create_record(
     
     except HttpError as e:
         logger.error(f"Airtable API error: {e}")
-        raise HTTPException(status_code=e.status_code, detail=e.message)
+        status_code = e.response.status_code if e.response else 500
+        detail = str(e)
+        raise HTTPException(status_code=status_code, detail=detail)
     except Exception as e:
         logger.error(f"Error creating record: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -367,7 +371,9 @@ async def update_record(
     
     except HttpError as e:
         logger.error(f"Airtable API error: {e}")
-        raise HTTPException(status_code=e.status_code, detail=e.message)
+        status_code = e.response.status_code if e.response else 500
+        detail = str(e)
+        raise HTTPException(status_code=status_code, detail=detail)
     except Exception as e:
         logger.error(f"Error updating record: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -398,7 +404,9 @@ async def delete_record(
     
     except HttpError as e:
         logger.error(f"Airtable API error: {e}")
-        raise HTTPException(status_code=e.status_code, detail=e.message)
+        status_code = e.response.status_code if e.response else 500
+        detail = str(e)
+        raise HTTPException(status_code=status_code, detail=detail)
     except Exception as e:
         logger.error(f"Error deleting record: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -429,7 +437,9 @@ async def create_records_batch(
     
     except HttpError as e:
         logger.error(f"Airtable API error: {e}")
-        raise HTTPException(status_code=e.status_code, detail=e.message)
+        status_code = e.response.status_code if e.response else 500
+        detail = str(e)
+        raise HTTPException(status_code=status_code, detail=detail)
     except Exception as e:
         logger.error(f"Error batch creating records: {e}")
         raise HTTPException(status_code=500, detail=str(e))
